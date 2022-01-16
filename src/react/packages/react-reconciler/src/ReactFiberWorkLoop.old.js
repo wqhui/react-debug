@@ -563,11 +563,13 @@ export function scheduleUpdateOnFiber(
 
   if (lane === SyncLane) {
     if (
-      // Check if we're inside unbatchedUpdates
+      // executionContext 表示处在react的调度中，比如在componetDidUpdate中同步或者React监听事件中调用setState方法(如果是setTimeout则不是)
+      // 非批量更新 Check if we're inside unbatchedUpdates 
       (executionContext & LegacyUnbatchedContext) !== NoContext &&
-      // Check if we're not already rendering
+      // 初始化渲染  Check if we're not already rendering
       (executionContext & (RenderContext | CommitContext)) === NoContext
     ) {
+      //同步更新
       // Register pending interactions on the root to avoid losing traced interaction data.
       schedulePendingInteractions(root, lane);
 
@@ -576,6 +578,7 @@ export function scheduleUpdateOnFiber(
       // should be deferred until the end of the batch.
       performSyncWorkOnRoot(root);
     } else {
+      //异步更新
       ensureRootIsScheduled(root, eventTime);
       schedulePendingInteractions(root, lane);
       if (executionContext === NoContext) {

@@ -389,6 +389,7 @@ function updateMemoComponent(
   updateLanes: Lanes,
   renderLanes: Lanes,
 ): null | Fiber {
+  // 1. 第一次渲染，直接渲染组件
   if (current === null) {
     const type = Component.type;
     if (
@@ -465,6 +466,7 @@ function updateMemoComponent(
     const prevProps = currentChild.memoizedProps;
     // Default to shallow comparison
     let compare = Component.compare;
+    // 2. 比较prpos，定义的比较函数则使用自定义的，否则使用默认的浅比较
     compare = compare !== null ? compare : shallowEqual;
     if (compare(prevProps, nextProps) && current.ref === workInProgress.ref) {
       return bailoutOnAlreadyFinishedWork(current, workInProgress, renderLanes);

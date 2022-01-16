@@ -21,3 +21,5 @@ packages/react-devtools-inline/dist
 packages/react-devtools-shell/dist
 packages/react-devtools-scheduling-profiler/dist
 packages/react-devtools-scheduling-profiler/static
+
+src/react
