@@ -522,6 +522,9 @@ export function scheduleUpdateOnFiber(
   checkForNestedUpdates();
   warnAboutRenderPhaseUpdatesInDEV(fiber);
 
+  //初次渲染无效果，仅作用于更新
+  //设置当前更新优先级为lane
+  //从当前节点向上遍历所有节点，直到根节点， 找出了fiber树中受到本次更新影响的所有节点，设置沿途所有节点(包括alternate)的childLa
   const root = markUpdateLaneFromFiberToRoot(fiber, lane);
   if (root === null) {
     warnAboutUpdateOnUnmountedFiberInDEV(fiber);
@@ -975,6 +978,7 @@ function performSyncWorkOnRoot(root) {
 
   let lanes;
   let exitStatus;
+  // 1. 构造fiber树
   if (
     root === workInProgressRoot &&
     includesSomeLane(root.expiredLanes, workInProgressRootRenderLanes)
@@ -1035,6 +1039,9 @@ function performSyncWorkOnRoot(root) {
 
   // We now have a consistent tree. Because this is a sync render, we
   // will commit it even if something suspended.
+  // 2. 开始提交阶段: 渲染fiber树
+  // root.current.alternate 获得的就是构造好新的fiber树
+  // 在一开始创建 workInProgress 时就将显示的fiber树指向了它 => current.alternate = workInProgress;
   const finishedWork: Fiber = (root.current.alternate: any);
   root.finishedWork = finishedWork;
   root.finishedLanes = lanes;
@@ -1646,9 +1653,14 @@ function performUnitOfWork(unitOfWork: Fiber): void {
   // The current, flushed, state of this fiber is the alternate. Ideally
   // nothing should rely on this, but relying on it here means that we don't
   // need an additional field on the work in progress.
+  // unitOfWork就是被传入的workInProgress，要构造的fiber树的当前fiber节点
+  // current 指向当前页面正在使用的fiber节点. 初次构造时, 页面还未渲染, 此时current = null.
   const current = unitOfWork.alternate;
   setCurrentDebugFiberInDEV(unitOfWork);
 
+  //执行具体构建Fiber节点的逻辑，如果不存在节点就新建，存在就根据输入判断是否更新
+  //最后都会返回下一个节点的引用（第一个子节点）
+  //这一步也被称作探寻阶段'
   let next;
   if (enableProfilerTimer && (unitOfWork.mode & ProfileMode) !== NoMode) {
     startProfilerTimer(unitOfWork);
@@ -1662,8 +1674,11 @@ function performUnitOfWork(unitOfWork: Fiber): void {
   unitOfWork.memoizedProps = unitOfWork.pendingProps;
   if (next === null) {
     // If this doesn't spawn new work, complete the current work.
+    // 如果没有派生出新的节点, 则进入completeWork阶段, 传入的是当前unitOfWork
+    // 同时也会进行是否存在兄弟节点的判断
     completeUnitOfWork(unitOfWork);
   } else {
+    // 如果存在下一个节点，继续执行
     workInProgress = next;
   }
 
@@ -1689,6 +1704,7 @@ function completeUnitOfWork(unitOfWork: Fiber): void {
         !enableProfilerTimer ||
         (completedWork.mode & ProfileMode) === NoMode
       ) {
+        // 处理Fiber节点, 关联Fiber节点和dom对象, 设置DOM属性和绑定事件等
         next = completeWork(current, completedWork, subtreeRenderLanes);
       } else {
         startProfilerTimer(completedWork);
@@ -1706,6 +1722,8 @@ function completeUnitOfWork(unitOfWork: Fiber): void {
 
       resetChildLanes(completedWork);
 
+      //每个执行完completeWork且存在flags的Fiber节点, 会被保存在一条被称为effectList的单向链表
+      //firstEffect指向第一个Fiber节点，可以通过fiber.nextEffect查看下一个改变的Fiber节点，lastEffect执指向最后一个Fiber节点
       if (
         returnFiber !== null &&
         // Do not append effects to parents if a sibling failed to complete
@@ -1786,6 +1804,7 @@ function completeUnitOfWork(unitOfWork: Fiber): void {
       }
     }
 
+    //存在兄弟节点，开始回溯，处理兄弟节点的beginWork
     const siblingFiber = completedWork.sibling;
     if (siblingFiber !== null) {
       // If there is more work to do in this returnFiber, do that next.
@@ -1896,6 +1915,7 @@ function commitRootImpl(root, renderPriorityLevel) {
     // no more pending effects.
     // TODO: Might be better if `flushPassiveEffects` did not automatically
     // flush synchronous work at the end, to avoid factoring hazards like this.
+    // 触发useEffect回调与其他同步任务。由于这些任务可能触发新的渲染，所以这里要一直遍历执行直到没有任务
     flushPassiveEffects();
   } while (rootWithPendingPassiveEffects !== null);
   flushRenderPhaseStrictModeWarningsInDEV();
@@ -1931,6 +1951,7 @@ function commitRootImpl(root, renderPriorityLevel) {
 
     return null;
   }
+  // 清空FiberRoot对象上的属性
   root.finishedWork = null;
   root.finishedLanes = NoLanes;
 
@@ -1963,6 +1984,7 @@ function commitRootImpl(root, renderPriorityLevel) {
 
   if (root === workInProgressRoot) {
     // We can reset these now that they are finished.
+    // 重置全局变量
     workInProgressRoot = null;
     workInProgress = null;
     workInProgressRootRenderLanes = NoLanes;
@@ -1979,6 +2001,8 @@ function commitRootImpl(root, renderPriorityLevel) {
     // the root has an effect, we need to add it to the end of the list. The
     // resulting list is the set that would belong to the root's parent, if it
     // had one; that is, all the effects in the tree including the root.
+    // 默认情况下fiber节点的副作用链表是不包括自身的
+    // 如果根节点有副作用, 则将根节点添加到副作用链表的末尾
     if (finishedWork.lastEffect !== null) {
       finishedWork.lastEffect.nextEffect = finishedWork;
       firstEffect = finishedWork.firstEffect;
@@ -2015,6 +2039,7 @@ function commitRootImpl(root, renderPriorityLevel) {
     shouldFireAfterActiveInstanceBlur = false;
 
     nextEffect = firstEffect;
+    // 阶段1: dom突变之前
     do {
       if (__DEV__) {
         invokeGuardedCallback(null, commitBeforeMutationEffects, null);
@@ -2026,6 +2051,9 @@ function commitRootImpl(root, renderPriorityLevel) {
         }
       } else {
         try {
+          //1.处理`focus` 和 `blur` 逻辑
+          //2. 调用getSnapshotBeforeUpdate生命周期钩子
+          //3. 调度useEffect
           commitBeforeMutationEffects();
         } catch (error) {
           invariant(nextEffect !== null, 'Should be working on an effect.');
@@ -2046,6 +2074,7 @@ function commitRootImpl(root, renderPriorityLevel) {
 
     // The next phase is the mutation phase, where we mutate the host tree.
     nextEffect = firstEffect;
+    // 阶段2: dom突变, 界面发生改变
     do {
       if (__DEV__) {
         invokeGuardedCallback(
@@ -2063,6 +2092,9 @@ function commitRootImpl(root, renderPriorityLevel) {
         }
       } else {
         try {
+          //1. 解绑ref
+          //2. 操作DOM的 插入Placement 更新Update 删除Deletion并处理声明周期componentWillUnmount
+          //3. 调度useEffect的销毁函数
           commitMutationEffects(root, renderPriorityLevel);
         } catch (error) {
           invariant(nextEffect !== null, 'Should be working on an effect.');
@@ -2081,12 +2113,19 @@ function commitRootImpl(root, renderPriorityLevel) {
     // the mutation phase, so that the previous tree is still current during
     // componentWillUnmount, but before the layout phase, so that the finished
     // work is current during componentDidMount/Update.
+    console.log(
+      '%c[debug]', 'background:#35495e;color:#fff', 'commit mutation完毕',
+      '\n', '新的渲染Fiber树为:', root.current, 
+      '\n', '即将切换到新的渲染Fiber树:', finishedWork
+    )
+    // 切换current指针
     root.current = finishedWork;
 
     // The next phase is the layout phase, where we call effects that read
     // the host tree after it's been mutated. The idiomatic use case for this is
     // layout, but class component lifecycles also fire here for legacy reasons.
     nextEffect = firstEffect;
+    // 阶段3: layout阶段, 调用生命周期componentDidUpdate和ref回调函数等
     do {
       if (__DEV__) {
         invokeGuardedCallback(null, commitLayoutEffects, null, root, lanes);
@@ -2098,6 +2137,8 @@ function commitRootImpl(root, renderPriorityLevel) {
         }
       } else {
         try {
+          // 1. commitLayoutEffectOnFiber，调用生命周期函数
+          // 2. commitAttachRef，设置ref
           commitLayoutEffects(root, lanes);
         } catch (error) {
           invariant(nextEffect !== null, 'Should be working on an effect.');

@@ -701,6 +701,7 @@ function completeWork(
       const rootContainerInstance = getRootHostContainer();
       const type = workInProgress.type;
       if (current !== null && workInProgress.stateNode != null) {
+        //1. update情况
         updateHostComponent(
           current,
           workInProgress,
@@ -709,6 +710,7 @@ function completeWork(
           rootContainerInstance,
         );
 
+        //设置ref标记
         if (current.ref !== workInProgress.ref) {
           markRef(workInProgress);
         }
@@ -744,6 +746,7 @@ function completeWork(
             markUpdate(workInProgress);
           }
         } else {
+          //2. moute情况
           const instance = createInstance(
             type,
             newProps,
@@ -752,13 +755,16 @@ function completeWork(
             workInProgress,
           );
 
+          // 将子孙DOM节点插入刚生成的DOM节点中
           appendAllChildren(instance, workInProgress, false, false);
 
+          // DOM节点赋值给fiber.stateNode
           workInProgress.stateNode = instance;
 
           // Certain renderers require commit-time effects for initial mount.
           // (eg DOM renderer supports auto-focus for certain elements).
           // Make sure such renderers get scheduled for later work.
+          // 与update逻辑中的updateHostComponent类似的处理props的过程
           if (
             finalizeInitialChildren(
               instance,

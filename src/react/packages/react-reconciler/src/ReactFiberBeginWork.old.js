@@ -3105,10 +3105,13 @@ function beginWork(
     }
   }
 
+  //1. 根据当前树是否存在节点判断是mount还是update
   if (current !== null) {
+    //1.1 update情况
     const oldProps = current.memoizedProps;
     const newProps = workInProgress.pendingProps;
 
+    //判断前后props和type是否一样，及上下文是否改变
     if (
       oldProps !== newProps ||
       hasLegacyContextChanged() ||
@@ -3117,6 +3120,7 @@ function beginWork(
     ) {
       // If props or context changed, mark the fiber as having performed work.
       // This may be unset if the props are determined to be equal later (memo).
+      //存在不一样则设置更新标志
       didReceiveUpdate = true;
     } else if (!includesSomeLane(renderLanes, updateLanes)) {
       didReceiveUpdate = false;
@@ -3293,6 +3297,7 @@ function beginWork(
           return updateOffscreenComponent(current, workInProgress, renderLanes);
         }
       }
+      //该节点无变化则进入子节点的流程
       return bailoutOnAlreadyFinishedWork(current, workInProgress, renderLanes);
     } else {
       if ((current.flags & ForceUpdateForLegacySuspense) !== NoFlags) {
@@ -3308,6 +3313,7 @@ function beginWork(
       }
     }
   } else {
+    //1.2 mount情况
     didReceiveUpdate = false;
   }
 
@@ -3318,6 +3324,9 @@ function beginWork(
   // move this assignment out of the common path and into each branch.
   workInProgress.lanes = NoLanes;
 
+  // 2.创建Fiber节点 
+  // mount时：根据tag不同，创建不同的子Fiber节点
+  // update时：根据tag不同，进入DOM Diff判断是否复用节点
   switch (workInProgress.tag) {
     case IndeterminateComponent: {
       return mountIndeterminateComponent(
