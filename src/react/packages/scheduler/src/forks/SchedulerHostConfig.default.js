@@ -248,7 +248,9 @@ if (
   cancelHostCallback = function() {
     scheduledHostCallback = null;
   };
-
+  // 延迟预期时间，执行 handleTimeout
+  // callback 传入的handleTimeout
+  // ms 延迟的时间（timerQueue第一个任务的开始时间-当前时间）
   requestHostTimeout = function(callback, ms) {
     taskTimeoutID = setTimeout(() => {
       callback(getCurrentTime());

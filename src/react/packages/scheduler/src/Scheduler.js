@@ -116,15 +116,19 @@ function advanceTimers(currentTime) {
 
 function handleTimeout(currentTime) {
   isHostTimeoutScheduled = false;
+  //遍历timerQueue,判断是否有到期的任务，存在到期任务则放入taskQueue
   advanceTimers(currentTime);
 
   if (!isHostCallbackScheduled) {
     if (peek(taskQueue) !== null) {
+      //从普通任务队列取出任务并且执行
       isHostCallbackScheduled = true;
       requestHostCallback(flushWork);
     } else {
+      //如果没有普通任务，继续执行timerQueue
       const firstTimer = peek(timerQueue);
       if (firstTimer !== null) {
+        //从timerQueue取出任务，再次执行requestHostTimeout，延迟执行任务
         requestHostTimeout(handleTimeout, firstTimer.startTime - currentTime);
       }
     }
