@@ -52,6 +52,7 @@ if (
       }
     }
   };
+  //不支持MessageChannel的，使用setTimeout
   requestHostCallback = function(cb) {
     if (_callback !== null) {
       // Protect against re-entrancy.
@@ -128,7 +129,10 @@ if (
   ) {
     const scheduling = navigator.scheduling;
     shouldYieldToHost = function() {
+      //获取当前时间
       const currentTime = getCurrentTime();
+      //判断当前时间是否大于到期时间
+      // deadline = currentTime（任务开始的时间，不是现在这个当前时间） + yieldInterval
       if (currentTime >= deadline) {
         // There's no time left. We may want to yield control of the main
         // thread, so the browser can perform high priority tasks. The main ones
@@ -147,6 +151,7 @@ if (
         return currentTime >= maxYieldInterval;
       } else {
         // There's still time left in the frame.
+        //
         return false;
       }
     };
@@ -182,15 +187,22 @@ if (
     }
   };
 
+  // 
   const performWorkUntilDeadline = () => {
+    // requestHostCallback 将 flushWork 赋给了 scheduledHostCallback
     if (scheduledHostCallback !== null) {
+      //获取当前时间
       const currentTime = getCurrentTime();
       // Yield after `yieldInterval` ms, regardless of where we are in the vsync
       // cycle. This means there's always time remaining at the beginning of
       // the message event.
+      // 全局遍历，用来测量任务的执行的时间，从而知道主线程被阻塞了多久
       deadline = currentTime + yieldInterval;
+      // 是否还有剩余时间
       const hasTimeRemaining = true;
       try {
+        // hasMoreWork  是否还有需要执行的任务
+        // scheduledHostCallback 执行当前任务，同时查看是否有更多任务
         const hasMoreWork = scheduledHostCallback(
           hasTimeRemaining,
           currentTime,
@@ -201,6 +213,7 @@ if (
         } else {
           // If there's more work, schedule the next message event at the end
           // of the preceding one.
+          //通过MessageChannel port.postMessage调用performWorkUntilDeadline，继续任务
           port.postMessage(null);
         }
       } catch (error) {
@@ -221,10 +234,13 @@ if (
   const port = channel.port2;
   channel.port1.onmessage = performWorkUntilDeadline;
 
+  //正常使用 MessageChannel 做一个调用
+  //callback 为调用时传入的 flushWork
   requestHostCallback = function(callback) {
     scheduledHostCallback = callback;
     if (!isMessageLoopRunning) {
       isMessageLoopRunning = true;
+      //通过MessageChannel port.postMessage调用performWorkUntilDeadline，进行任务的调度
       port.postMessage(null);
     }
   };
